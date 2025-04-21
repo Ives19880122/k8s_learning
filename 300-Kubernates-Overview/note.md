@@ -120,7 +120,7 @@ nano .bashrc
 alias docker='sudo podman'
 # 儲存離開
 --------------
-sudo rebot
+sudo reboot
 ```
 
 #### 腳本 nano podman4.sh
