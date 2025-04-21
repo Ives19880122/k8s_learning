@@ -86,3 +86,58 @@
 - 如果版本號不同時，shim, containerd
   - 會對不起來，無法正常運作
   - `講師分享`：自己手刻不使用套件，可能遇到的問題
+
+### High Level Container Runtime
+
+![圖3](./images/3.png)
+- podman可以替代docker
+  - rootless
+- 與docker參數指令一模一樣
+  - 可以考慮指令替代方式
+  ```cmd=
+  alias docker='sudo podman'
+  ```
+
+### 指令安裝與套件
+
+```cmd=
+# 更新linux
+sudo apt update; sudo apt upgrade -y
+# 安裝套件
+sudo apt install zip unzip ipvsadm golang-go  -y
+```
+
+#### Podman安裝於Ubuntu24.04
+
+- 規格版本限制4.9以上，一定要比這個還新
+
+```cmd=
+sudo apt install podman -y
+sudo podman version
+nano .bashrc
+--------------
+# 編輯加入
+alias docker='sudo podman'
+# 儲存離開
+--------------
+sudo rebot
+```
+
+#### 腳本 nano podman4.sh
+
+```shell=
+#!/bin/sh
+ubuntu_version='22.04'
+key_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key"
+sources_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}"
+
+echo "deb $sources_url/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list
+curl -fsSL $key_url | gpg --dearmor | tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_unstable.gpg > /dev/null
+```
+
+
+#### 補充資訊
+
+- k8s `ingress` 即將淘汰，要被 `gateway api` 取代
+  - ingress範圍很窄，只用在http
+- 回家運作方式，可以用網站上的vm跑linux照著指令逐步操作。
