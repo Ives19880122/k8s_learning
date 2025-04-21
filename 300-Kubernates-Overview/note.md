@@ -186,51 +186,87 @@ CNCF 給出了雲原生應用的三大特徵：
 
 ### 認識 Kubernetes 
 
-- 能力
-  ![6](./images/6.png)
+#### 能力
+![6](./images/6.png)
 
-- 用途
-  ![7](./images/7.png)
+##### Declarative Configuration
 
-- 備註
-  ```
-  1. 台灣人工智慧同好交流區
-  https://www.facebook.com/groups/datasci.tw/posts/9133905346686774/
-  2. Day17 - 模型壓縮之如何玩弄模型PART2：蒸餾/剪枝/稀疏化
-  https://ithelp.ithome.com.tw/articles/10353396
-  3. [ 技術名詞介紹 ] 知識蒸餾 Knowledge Distillation
-  https://medium.com/@simon3458/intro-knowledge-distillation-cea0e5d6d842
-  4. Gen.AI Frontiers的貼文
-  https://www.facebook.com/61572886117067/posts/-distillm-2對比學習如何提升-llm-知識蒸餾效能-microsoft-與-kaist-ai-研究團隊提出了一種-對比學習方法contrastive-/122115664340762870/
-  5.【DeepSeek】R1 入門指南：架構、訓練、本地部署和硬體需求
-  https://hao.cnyes.com/post/133342
-  6. 如何利用量化在低資源情況下執行70B的LLaMA2模型？
-  https://r23456999.medium.com/如何利用量化在低資源情況下執行70b的llama2模型-98691acc7d81
-  7. 不專業整理 - A100 / RTX 6000 / 4090 價格與 LLM 效能數據
-  https://blog.darkthread.net/blog/gpu-4-llm-price-n-performance/
-  8. AI Tools for Kubernetes Management
-  https://medium.com/@manojkumar_41904/ai-tools-for-kubernetes-management-57d3f20d1316
+- 編輯yml檔來做app
+- 知道如何建立app
+- 解決交接文件
 
-  數位發展部 2025 宣告
-  * 算力 (Computing Power):
-      * 數位部與國科會提供有限的免費 GPU 算力（H100, MI300X）給學術界及民間新創，主要用於驗證初期想法 (Proof of Concept)。
-      * 不大量提供是為了避免扼殺民間算力池的商業機會，維持生態系健康。
-      * 會定期舉辦說明會並有申請時程。
+##### Automation
 
-  有算力,才有機會培養人才,民間要有算力,硬體 幾千萬起跳, 國家的算力會分配到那些人手上 ?
+- 增擴容的前提，要有預留空間。
 
-  LLM 硬體規格需求
-  1. One or two a6000s(NT$ 180,000) can serve a 70b with decent tps for 20 people
+##### Extensibility
 
-  2. Llama-3.1-Nemotron-Ultra 支援 128K 字詞的 context length，欲執行推論，最好搭配單一 8xH100  節點
+- k8s擴充能力，要用go語言實作。
 
-  輝達（NVIDIA）前年（2022）發布「NVIDIA H100 80GB Tensor 核心GPU PCIe」大受歡迎，近日網友發現該產品在本土電商平台上架，價格高達139萬元，然而重整頁面後竟已立刻售完，網友嚇歪直呼「當你還在那嫌貴的時候，商品早已完售」
+#### 用途
 
-  AI 與 K8S
-  AI Tools for Kubernetes Management 
-  1. Kubeflow: Kubeflow is an open-source platform dedicated to machine learning (ML) on K8s. It offers tools for building, deploying, and managing ML models within K8s clusters. Kubeflow Pipelines, for example, enables automated ML workflows, making it easier to integrate ML with your applications.
-  2. Kubermatic: Kubermatic Kubernetes Platform (KKP) uses AI to optimize K8s cluster management. It automates tasks like scaling, updates, and self-healing, improving cluster efficiency. Kubermatic also enhances security with built-in policies and controls.
-  3. Opsani: Opsani uses AI to continuously optimize K8s application performance. It analyzes metrics, configures settings, and adapts to changing workloads in real-time, ensuring optimal resource usage and cost-efficiency.
-  4. Spot by NetApp: Spot uses AI to manage K8s infrastructure across multiple cloud providers. It automates the selection of the most cost-effective instance types and automatically scales clusters based on workload requirements.
-  5. K-rail: K-rail focuses on K8s security and compliance. It uses AI to scan K8s configurations and policies, identifying vulnerabilities and violations, and providing actionable recommendations.
-  ```
+![7](./images/7.png)
+
+##### PAAS
+
+- K8s是符合Paas
+
+##### 微服務
+
+- 局部重啟特定服務。
+- 網路快速反應。
+- 有K8s技術，才讓微服務有機會實現
+
+##### DevOps Practies
+
+- 自動化 ex: jenkins
+- 老師後面會分享如何把jenkins丟進k8s
+
+##### Iceberg/Delta Lakehouse in K8S
+
+- 湖倉(`數據中台`：某些政府單位or金融機構)
+
+
+#### 備註
+
+```
+1. 台灣人工智慧同好交流區
+https://www.facebook.com/groups/datasci.tw/posts/9133905346686774/
+1. Day17 - 模型壓縮之如何玩弄模型PART2：蒸餾/剪枝/稀疏化
+https://ithelp.ithome.com.tw/articles/10353396
+1. [ 技術名詞介紹 ] 知識蒸餾 Knowledge Distillation
+https://medium.com/@simon3458/intro-knowledge-distillation-cea0e5d6d842
+1. Gen.AI Frontiers的貼文
+https://www.facebook.com/61572886117067/posts/-distillm-2對比學習如何提升-llm-知識蒸餾效能-microsoft-與-kaist-ai-研究團隊提出了一種-對比學習方法contrastive-/122115664340762870/
+5.【DeepSeek】R1 入門指南：架構、訓練、本地部署和硬體需求
+https://hao.cnyes.com/post/133342
+1. 如何利用量化在低資源情況下執行70B的LLaMA2模型？
+https://r23456999.medium.com/如何利用量化在低資源情況下執行70b的llama2模型-98691acc7d81
+1. 不專業整理 - A100 / RTX 6000 / 4090 價格與 LLM 效能數據
+https://blog.darkthread.net/blog/gpu-4-llm-price-n-performance/
+1. AI Tools for Kubernetes Management
+https://medium.com/@manojkumar_41904/ai-tools-for-kubernetes-management-57d3f20d1316
+
+數位發展部 2025 宣告
+* 算力 (Computing Power):
+    * 數位部與國科會提供有限的免費 GPU 算力（H100, MI300X）給學術界及民間新創，主要用於驗證初期想法 (Proof of Concept)。
+    * 不大量提供是為了避免扼殺民間算力池的商業機會，維持生態系健康。
+    * 會定期舉辦說明會並有申請時程。
+
+有算力,才有機會培養人才,民間要有算力,硬體 幾千萬起跳, 國家的算力會分配到那些人手上 ?
+
+LLM 硬體規格需求
+1. One or two a6000s(NT$ 180,000) can serve a 70b with decent tps for 20 people
+
+2. Llama-3.1-Nemotron-Ultra 支援 128K 字詞的 context length，欲執行推論，最好搭配單一 8xH100  節點
+
+輝達（NVIDIA）前年（2022）發布「NVIDIA H100 80GB Tensor 核心GPU PCIe」大受歡迎，近日網友發現該產品在本土電商平台上架，價格高達139萬元，然而重整頁面後竟已立刻售完，網友嚇歪直呼「當你還在那嫌貴的時候，商品早已完售」
+
+AI 與 K8S
+AI Tools for Kubernetes Management 
+1. Kubeflow: Kubeflow is an open-source platform dedicated to machine learning (ML) on K8s. It offers tools for building, deploying, and managing ML models within K8s clusters. Kubeflow Pipelines, for example, enables automated ML workflows, making it easier to integrate ML with your applications.
+2. Kubermatic: Kubermatic Kubernetes Platform (KKP) uses AI to optimize K8s cluster management. It automates tasks like scaling, updates, and self-healing, improving cluster efficiency. Kubermatic also enhances security with built-in policies and controls.
+3. Opsani: Opsani uses AI to continuously optimize K8s application performance. It analyzes metrics, configures settings, and adapts to changing workloads in real-time, ensuring optimal resource usage and cost-efficiency.
+4. Spot by NetApp: Spot uses AI to manage K8s infrastructure across multiple cloud providers. It automates the selection of the most cost-effective instance types and automatically scales clusters based on workload requirements.
+5. K-rail: K-rail focuses on K8s security and compliance. It uses AI to scan K8s configurations and policies, identifying vulnerabilities and violations, and providing actionable recommendations.
+```
