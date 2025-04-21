@@ -125,3 +125,16 @@ Alpine Linux 是一套由社群開發，以安全為導向的 Linux 作業系統
 - `kto tk8s`
   - 產生tk8s系統
   - 大約要25分鐘
+
+- `kgn tk8s`
+  - 刪除tk8s
+  - 如果遇到問題的刪除指令
+
+#### 因kto安裝bug取代流程
+
+- 使用VMware的ALP取代
+  - ![2](./images/2.png)
+  - 現場使用檔案：`alp.tkcdc.v1`
+- `ssh bigred@<VM虛擬IP>`
+  - `172.16.131.128`
+  - user = passwd
