@@ -270,3 +270,100 @@ AI Tools for Kubernetes Management
 4. Spot by NetApp: Spot uses AI to manage K8s infrastructure across multiple cloud providers. It automates the selection of the most cost-effective instance types and automatically scales clusters based on workload requirements.
 5. K-rail: K-rail focuses on K8s security and compliance. It uses AI to scan K8s configurations and policies, identifying vulnerabilities and violations, and providing actionable recommendations.
 ```
+
+-----
+
+## Kubernetes 原生運作架構
+
+![8](./images/8.png)
+
+- K8s一定要三台電腦
+  - 3個application container可以滿足
+- 參考網站 [k8s kind](https://kind.sigs.k8s.io/)
+  - 把k8s裝在application container。
+  - `取代docker compose`
+  - google eng製作。
+- 參考網站 [k3d](https://k3d.io/stable/)
+  - 用application container `k3S` 來做IOT。
+  - 物聯網的作法可參考。
+  - k3s把k8s原先5個program縮成一個，輕量化。
+- 只要一台Server，裡面三個application container
+  - `作業系統`
+    - ubuntu linux
+    - Red Hat Enterprise Linux
+  - `容器工具`
+    - podman
+
+##### 補充備註
+
+```
+1. [Day7] Container Runtime - CRI-O (一定要看)
+https://ithelp.ithome.com.tw/articles/10219102?sc=rss.iron
+2. Docker demons: PID-1, orphans, zombies, and signals.
+https://www.fpcomplete.com/blog/2016/10/docker-demons-pid1-orphans-zombies-signals
+3. 微服務基礎建設 - Service Discovery (有解釋 傳統 DNS+DHCP 服務與 Discovery Service 的差異, 一定要看)
+https://columns.chicken-house.net/2017/12/31/microservice9-servicediscovery/
+
+Kubernetes Masters
+本節將說明如何部署與設定 Kubernetes Master 角色中的各元件，在開始前先簡單了解一下各元件功能：
+
+kubelet：負責管理 POD 的生命週期，定期從 API Server 取得節點上的預期狀態(如網路、儲存等等配置)資源，並呼叫對應的容器介面(CRI、CNI 等)來達成這個狀態。任何 Kubernetes 節點都會擁有該元件。
+
+kube-apiserver：以 REST APIs 提供 Kubernetes 資源的 CRUD，如授權、認證、存取控制與 API 註冊等機制。
+kube-controller-manager：透過核心控制循環(Core Control Loop)監聽 Kubernetes API 的資源來維護叢集的狀態，這些資源會被不同的控制器所管理，如 Replication Controller、Namespace Controller 等等。而這些控制器會處理著自動擴展、滾動更新等等功能。
+kube-scheduler：負責將一個(或多個)容器依據排程策略分配到對應節點上讓容器引擎(如 Docker)執行。而排程受到 QoS 要求、軟硬體約束、親和性(Affinity)等等規範影響。
+Etcd：用來保存叢集所有狀態的 Key/Value 儲存系統，所有 Kubernetes 元件會透過 API Server 來跟 Etcd 進行溝通來保存或取得資源狀態。
+HAProxy：提供多個 API Server 的負載平衡(Load Balance)。
+
+
+Container Runtime
+1. kubelet 透過 Dockershim 與 docker engine 連接，最後一路串接到 containerd 來創建 container。
+2. 繞過 Docker 直接與後端的 Containerd 溝通，為了滿足這個需求也需要一個額外的應用程式 CRI-Containerd 來作為中間溝通的橋樑
+3. 隨者 containerd 1.1 版本的發行， CRI-Containerd 本身的功能已經可以透過 plugin 的方式實現於 containerd 中，可以再少掉一層溝通的耗損。
+4. CRI-O 一個完全針對 kubernetes 需求的解決方案，讓整體的溝通變得更快速與簡單。
+
+認識 CRI-O
+作為一個滿足 CRI 標準且能夠產生出相容於 OCI 標準 container 的解決方案，從整個設計到特色全部都是針對 kubernetes 來打造
+
+1. 本身的軟體版本與 kubernetes 一致，同時所有的測試都是基於 kubernetes 的使用去測試，確保穩定性。
+2. 目標是支援所有相容於 OCI Runtime 的解決方案，譬如 Runc, Kata Containers
+3. 支援不同的 container image，譬如 docker 自己本身就有 schema 2/version 1 與 schema 2/version 2
+4. 使用 Container Network Interface CNI 來管理 Container 網路
+
+顯示目前 K8S 提供的最新版本
+$ export K8S_VERSION=$(curl -sS https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+$ echo $K8S_VERSION
+v1.15.2
+```
+
+### POD
+
+- 豆莢
+- K8S運作最小單位
+- 把App Container包起來。
+  - 想成一個毛豆裡面有好幾顆豆仁
+
+#### Control plane
+
+- 內部有四個POD
+  - API SERVER
+  - Scheduler
+  - Controller-Manager
+  - etcd
+
+##### API SERVER
+
+- `authentication`
+  - 作身份認證，不做帳號密碼，用憑證認證。
+- `authorization`
+  - 授權，能夠做哪些事情
+- 年底K8S資安課程
+  - 主要關注API SERVER
+
+##### Scheduler
+
+- 決定`Pod`要在哪個`Worker Node`執行
+- 所在`Worker Node`上的`kubelet`產出`Pod`
+  - 負責Pod裡面的`life cycle`
+- Container Runtime `containerd`
+  - OCI distribution 下載image
