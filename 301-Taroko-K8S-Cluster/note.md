@@ -100,3 +100,28 @@ Alpine Linux 是一套由社群開發，以安全為導向的 Linux 作業系統
 
 - `cat ~/tk/conf/tk8s.conf`
   - 檢視tk8s設定檔
+
+- `nano ~/tk/conf/tk8s.conf`
+  - 修改設定檔
+  ```
+  # 取消自行創建的gateway
+  export TKGW="false"
+  ```
+
+- `sudo nano /etc/profile`
+  - 修改登入檔
+  ```
+  export PATH=~/tk/bin:$PATH
+  alias dir='ls -alh'
+  ```
+  - `source /etc/profile`
+
+-----
+
+- `kls`
+  - 老師自己寫的程式
+  - 沒有建立時 `no clusters`
+
+- `kto tk8s`
+  - 產生tk8s系統
+  - 大約要25分鐘
