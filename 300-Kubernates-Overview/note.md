@@ -351,19 +351,104 @@ v1.15.2
   - Controller-Manager
   - etcd
 
-##### API SERVER
+#### API SERVER
 
 - `authentication`
   - 作身份認證，不做帳號密碼，用憑證認證。
+  - 坊間可能用WebUI連線WebServer的登入K8S管理系統進行操作。
+  - 憑證認證是主要的方式。
+  - CLI Command Line Interface
+    - kubectl
 - `authorization`
   - 授權，能夠做哪些事情
 - 年底K8S資安課程
   - 主要關注API SERVER
+- 對話的對象
+  - Web UI / Kubectl
 
-##### Scheduler
+##### 常見UI套件
+
+- Tanzu 
+- OpenShift
+- Rancher
+
+###### UI套件差異:
+
+| 特性/產品       | **Tanzu**                                                                 | **OpenShift**                                                                 | **Rancher**                                                                 |
+|------------------|---------------------------------------------------------------------------|-------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| **開發公司**    | VMware                                                                    | Red Hat                                                                      | SUSE                                                                        |
+| **核心技術**    | 基於 Kubernetes，整合 VMware 生態系統                                     | 基於 Kubernetes，提供企業級功能和 Red Hat 支援                               | 基於 Kubernetes，專注於多叢集管理                                           |
+| **定位**        | 企業級 Kubernetes 平台，整合 VMware vSphere 和雲端環境                   | 企業級容器平台，專注於應用程式開發和部署                                     | 多叢集 Kubernetes 管理平台                                                 |
+| **多叢集管理**  | 支援，但主要整合 VMware 環境                                              | 支援，但更專注於單一叢集的應用程式部署                                       | 強調多叢集管理，適合混合雲和多雲環境                                       |
+| **開發者工具**  | 提供 Tanzu Application Platform (TAP) 支援微服務和 CI/CD                  | 提供內建 CI/CD 工具（如 Jenkins 整合）                                       | 提供基本的應用程式部署功能                                                 |
+| **安裝與部署**  | 整合 VMware vSphere，適合 VMware 用戶                                     | 提供 OpenShift 安裝工具，支援多種環境（裸機、虛擬機、雲端）                  | 提供簡化的安裝流程，支援多種 Kubernetes 發行版                              |
+| **支援環境**    | VMware vSphere、AWS、Azure、Google Cloud                                 | 多雲、混合雲、裸機                                                          | 多雲、混合雲、裸機                                                         |
+| **商業模式**    | 商業授權，需購買 VMware Tanzu 授權                                        | 商業授權，需購買 Red Hat OpenShift 授權                                      | 開源（免費），但提供 SUSE 支援服務                                         |
+| **目標用戶**    | VMware 生態系統用戶，企業級應用程式開發                                   | 需要企業級支援和功能的用戶                                                  | 需要多叢集管理和開源解決方案的用戶                                         |
+| **特色功能**    | - 深度整合 VMware vSphere 和 NSX<br>- 提供 Tanzu Mission Control 管理工具 | - 內建 CI/CD 支援<br>- 強調安全性和企業級功能                                | - 多叢集管理<br>- 支援多種 Kubernetes 發行版（如 RKE、K3s）                 |
+| **開源性**      | 部分開源                                                                 | 部分開源（如 OKD 是 OpenShift 的開源版本）                                   | 完全開源                                                                    |
+
+
+-----
+
+#### Scheduler
 
 - 決定`Pod`要在哪個`Worker Node`執行
 - 所在`Worker Node`上的`kubelet`產出`Pod`
-  - 負責Pod裡面的`life cycle`
-- Container Runtime `containerd`
-  - OCI distribution 下載image
+  - 負責Pod裡面的`life cycle` (出生至死亡)
+
+#### Container Runtime 
+
+- `containerd`
+- OCI distribution 下載image
+- CRI `Container Runtime Interface`
+- k8s制定的標準
+  - ex: 實做 `containerd`, `cri-o`
+  - 底層都是OCI Runtime標準
+- 每個雲端商都有辦法選擇自己使用的Container Runtime。
+
+
+#### 網路溝通
+
+- iptables (linux 底層技術)
+
+##### 對外
+
+- kube proxy
+  - 雲端商把這層網路結構做掉，功能會由雲端商提供。
+
+##### 對內
+
+- pod與pod之間溝通要靠誰？(叢集內部)
+  - Container Network Interface `CNI`
+  - Interface能夠自行選用
+    - 可以選擇的專案有15個
+    - 表現的網路特性會不同
+
+###### 常見CNI實做
+
+- Flannel `適用同一棟大樓機房`
+- Calico `不同地點的機房`
+
+
+```
+# 補充
+
+tcp/ip基礎 static route 
+
+Static Route 是一種手動配置的路由方式，用於指定數據包的傳輸路徑。它通常用於小型網絡或需要精確控制路由的場景。
+
+Static Route 的特性
+1. 手動配置：需要網管員手動添加和管理路由。
+2. 固定性：路由表不會根據網絡拓撲的變化自動更新。
+3. 高效性：適合小型網絡，避免了動態路由協議的額外開銷。
+4. 可靠性：在網絡結構穩定的情況下，提供穩定的路由。
+
+使用場景
+- 小型網絡環境。
+- 特定流量需要經過指定路徑。
+- 減少動態路由協議的資源消耗。
+- 作為動態路由的備援路由。
+```
+
+-----
