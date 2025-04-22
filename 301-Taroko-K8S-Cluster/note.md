@@ -138,3 +138,7 @@ Alpine Linux 是一套由社群開發，以安全為導向的 Linux 作業系統
 - `ssh bigred@<VM虛擬IP>`
   - user = passwd
 
+
+#### 啟動k8s
+
+- 輸入 `kci tk8s` 啟動

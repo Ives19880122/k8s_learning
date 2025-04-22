@@ -1,5 +1,18 @@
 # 302-Taroko-K8S-Pod
 
+## 手繪Cluser架構
+
+- ifconfig 分別對linux主機與ssh主機查ip
+
+- ubutu linux 主機 - VMnet8 虛擬網卡 - Bridge - tkcdc
+- tkcdc - Podman1 虛擬網卡 - Bridge - pod
+  - 連到app container
+    - control plane
+    - worker1
+    - worker2 
+- ![0](./images/0.png)
+
+
 ## Kubernetes POD
 
 ### 常用Taroko K8s指令
@@ -21,12 +34,33 @@
 - 通常Pod內不會超過三個
 
 ##### 補充-IP分配 
+- `部份內容丟給copilot補完`
 
-- 去頭去尾
-- 前10 server
-- 後5 
-- 一半 DHCP(128起跳)
-- 一半 手動配
+- **去頭去尾**：
+  - 在 IP 分配中，通常會保留網段的第一個地址（網路地址）和最後一個地址（廣播地址），這些地址無法用於設備分配。
+  - 例如，對於子網 `192.168.1.0/24`：
+    - 網路地址：`192.168.1.0`
+    - 廣播地址：`192.168.1.255`
+    - 可用地址範圍：`192.168.1.1` 至 `192.168.1.254`
+
+- **前10**：
+  - 通常將子網的前 10 個 IP 地址分配給伺服器或基礎設施設備（如路由器、交換機、DNS 伺服器等）。
+  - 例如，`192.168.1.1` 至 `192.168.1.10` 可以用於伺服器。
+
+- **後5**：
+  - 子網的最後 5 個 IP 地址可能會保留給特殊用途，例如管理設備或備援伺服器。
+  - 例如，`192.168.1.250` 至 `192.168.1.254`。
+
+- **一半 手動配**：
+  - 剩餘的 IP 地址通常用於靜態分配，手動配置給特定設備（如伺服器、網路設備）。
+  - 例如，`192.168.1.11` 至 `192.168.1.127` 可以用於靜態分配。
+
+- **一半 DHCP**：
+  - 子網的一部分 IP 地址會分配給 DHCP（動態主機配置協定）使用，通常從中間開始分配。
+  - 例如，`192.168.1.128` 至 `192.168.1.200` 可以用於 DHCP 動態分配。
+
+
+-----
 
 ### Kubernetes Object 佈署命令
 
@@ -297,3 +331,179 @@ taroko               taroko-tkadm-74788d9f7c-qttc4                2/2     Runnin
     service/kubernetes   ClusterIP   10.98.0.1     <none>        443/TCP    22h     <none>           component=apiserver,provider=kubernetes
     ```
   - 發現service有對應selector，工作上也要注意命名是否正確。
+
+-----
+
+### 必須知道的重點
+
+![6](./images/6.png)
+
+- K8S System內，資料跟功能分離
+- 驗收：把POD建立,刪除,重建
+  - 程式設計師：要做資料的回存，例如用finalize
+- RESTARTS `重建的次數`
+  - 維運時特別需要注意
+  - 有些設計不要重建，才能即時確認錯誤
+
+-----
+
+## 直接對外連接 hostPort
+
+- k8s後面版本有的功能
+  - 可以使用裸POD
+- `host` : k8s的node
+- node上會開tcp/ip的port
+
+### 產生 echoserver POD yaml 檔
+
+- 指令 `kubectl run echoserver --image=registry.k8s.io/echoserver:1.10  --port 8080 --dry-run=client -o yaml > ~/tk/wulin/yaml/echosrv.yaml`
+  - `dry-run=client` : 不會產生POD, 會產生yml檔
+  - `-o` : 決定格式
+  - yml檔很多模板範本，各版本不同，透過指令產生較合理
+- 指令 建立別名
+    ```
+    alias ka='kubectl apply'
+    alias kc='kubectl exec cmdpod -- '
+    alias kd='kubectl delete'
+    alias kg='kubectl get'
+    ```
+- 指令 `nano ~/tk/wulin/yaml/echosrv.yaml`
+  - 確認yml
+    ```yml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+        creationTimestamp: null
+        labels:
+            run: echoserver
+        name: echoserver
+    spec:
+        containers:
+        - image: registry.k8s.io/echoserver:1.10
+            name: echoserver
+            ports:
+            - containerPort: 8080
+              hostPort: 9000 # 加入這行
+    ```
+  - 先看kind
+  - 類型Pod 看metadata
+  - containers
+    - 看image數量
+
+-----
+
+### 檢測 echoserver hostPort
+
+- 指令 `kubectl apply -f ~/tk/wulin/yaml/echosrv.yaml`
+  - 透過yml產生pod
+
+- 指令 `kubectl get pod -o wide`
+    - 確認建立的pod
+    ```
+    NAME         READY   STATUS    RESTARTS   AGE    IP             NODE           NOMINATED NODE   READINESS GATES
+    a1           1/1     Running   0          131m   10.244.0.134   tk8s-worker1   <none>           <none>
+    cmdpod       1/1     Running   0          84m    10.244.0.135   tk8s-worker1   <none>           <none>
+    echoserver   1/1     Running   0          18s    10.244.1.9     tk8s-worker2   <none>           <none>
+    ```
+
+- 指令 `kubectl get nodes -o wide`
+    ```
+    NAME                 STATUS   ROLES            AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION     CONTAINER-RUNTIME
+    tk8s-control-plane   Ready    control-plane    23h   v1.32.2   172.22.0.1    <none>        Debian GNU/Linux 12 (bookworm)   6.8.0-58-generic   containerd://2.0.3
+    tk8s-worker1         Ready    taroko-worker    23h   v1.32.2   172.22.0.2    <none>        Debian GNU/Linux 12 (bookworm)   6.8.0-58-generic   containerd://2.0.3
+    tk8s-worker2         Ready    taroko-gateway   23h   v1.32.2   172.22.0.3    <none>        Debian GNU/Linux 12 (bookworm)   6.8.0-58-generic   containerd://2.0.3
+    ```
+
+- 找到worker2 ip, 測試前面設定的hostPort
+
+- 指令 `curl -I http://172.22.0.3:9000`
+    ```
+    HTTP/1.1 200 OK
+    Date: Tue, 22 Apr 2025 08:07:30 GMT
+    Content-Type: text/plain
+    Connection: keep-alive
+    Server: echoserver
+    ```
+
+- 這種方式適用地端
+
+
+- 關閉k8s
+- 指令 `kco tk8s`
+    ```
+    Are you sure ? YES
+    tkadd-dnat.sh tkdel-dnat.sh created
+    tk8s-control-plane /etc/hosts ok
+    tk8s-worker1 /etc/hosts ok
+    tk8s-worker2 /etc/hosts ok
+    tk8s-worker2 Exited
+    tk8s-worker1 Exited
+    tk8s-control-plane Exited
+    tk8s: clock out
+    ```
+
+#### 網路速度探討
+
+- 關鍵字輸入copilot
+
+1. 網路上不建議db放在k8s內
+   - 原因：
+     - 性能瓶頸：資料庫通常需要高效能的 I/O 和穩定的網路連接，而 Kubernetes 的網路層（如 CNI 插件）可能會引入額外的延遲。
+     - 狀態性問題：資料庫是狀態性應用，而 Kubernetes 更適合無狀態應用（如微服務）。Pod 的短暫性和重啟可能導致資料庫的狀態不穩定。
+     - 存儲需求：資料庫需要高效能的持久化存儲，而 Kubernetes 的存儲解決方案（如 CSI 插件）可能無法滿足高 IOPS 的需求。
+     - 網路拓撲：Kubernetes 的網路抽象層（如 Service 和 kube-proxy）可能會增加網路跳數，影響資料庫的性能。
+   - 建議：
+     - 將資料庫部署在專用的實體機或虛擬機上，確保穩定性和高效能。
+     - 使用雲端提供的資料庫服務（如 AWS RDS、Azure SQL Database、GCP Cloud SQL），這些服務針對資料庫進行了優化。
+
+2. 實體主機網速取決實體網卡
+   - 原因：
+     - 實體主機的網路速度主要由網卡的規格決定，例如 1Gbps、10Gbps 或更高。
+     - 如果 Kubernetes 的 Node 使用低速網卡（如 1Gbps），在高流量場景下可能會成為瓶頸。
+     - 特別是當 Pod 之間需要大量數據傳輸（如資料庫查詢或大文件傳輸）時，網卡性能至關重要。
+   - 建議：
+     - 使用至少 10Gbps 的網卡，特別是對於需要高網路吞吐量的應用（如資料庫或大數據處理）。
+     - 如果使用分散式存儲（如 Ceph），建議使用 25Gbps 或更高的網卡，以避免網路成為瓶頸。
+3. hostPort
+   - 概念：
+     - Kubernetes 的 hostPort 功能允許 Pod 直接綁定到 Node 的指定端口，從而使外部流量可以直接訪問該 Pod。
+     - 這種方式繞過了 Kubernetes 的 Service 和 kube-proxy，直接使用 Node 的網路接口。
+   - 優點：
+     - 簡單直接，適合需要快速對外暴露的應用。
+     - 適用於地端環境（如內部測試或開發環境），不需要額外的負載均衡器。
+   - 缺點：
+     - 端口衝突：每個 Node 的端口是有限的，使用 hostPort 可能導致端口衝突。
+     - 可擴展性差：hostPort 綁定到特定的 Node，無法輕易擴展到多個 Node。
+     - 網路性能：hostPort 的性能取決於 Node 的網卡和網路配置，可能無法滿足高流量需求。
+   - 建議：
+     - 僅在需要直接對外暴露的應用中使用 hostPort，例如簡單的測試服務或內部工具。
+     - 在生產環境中，建議使用 Kubernetes 的 LoadBalancer 或 Ingress 來管理外部流量。
+
+4. 如果不是裸POD，要經過IP Table
+  - 說明：
+    - 非裸 Pod 的網路流量需要通過 Kubernetes 的網路代理（如 kube-proxy）進行處理。
+    - kube-proxy 通過 **iptables** 或 **IPVS** 實現流量轉發，將流量從 Service 路由到對應的 Pod。
+    - 這種方式增加了網路跳數，可能會引入額外的延遲。
+
+  - 裸 Pod 的特性：
+    - 使用 `hostNetwork: true` 的 Pod 可以直接使用 Node 的網路接口，無需通過 iptables 或 kube-proxy。
+    - 適合需要高性能網路的場景，但可能導致端口衝突或網路配置複雜化。
+
+5. 在 Kubernetes 中的網路跳數
+   1. Pod 與 Pod 的通信：
+      - 同一 Node：
+        - Pod 通過虛擬橋接器（如 cbr0 或 docker0）直接通信，跳數為 1。
+        - 這是最快的通信方式，因為數據不需要離開 Node。
+      - 不同 Node：
+        - Pod 通信需要通過 CNI 插件（如 Flannel、Calico）建立的隧道（Tunnel），數據封包需要經過多個網路設備（如路由器或交換機），跳數通常為 2 或更多。
+   2. Service 與 Pod 的通信：
+      - 當流量通過 Kubernetes 的 Service 時，會經過 kube-proxy。
+      - kube-proxy 使用 iptables 或 IPVS 將流量路由到目標 Pod，這會增加額外的跳數。
+      - 如果 Service 是 ClusterIP，流量會在叢集內部轉發，跳數通常為 2 或更多。
+      - 如果 Service 是 NodePort 或 LoadBalancer，流量可能需要經過外部負載均衡器，跳數會進一步增加。
+   3. 外部流量進入叢集：
+      - 當外部流量進入 Kubernetes 叢集時，通常需要經過以下幾個步驟：
+        - 外部負載均衡器（如雲端提供的 LoadBalancer）。
+        - Kubernetes 的 NodePort 或 Ingress。
+        - 最終到達目標 Pod。
+      - 這種情況下，跳數可能為 3 或更多。
