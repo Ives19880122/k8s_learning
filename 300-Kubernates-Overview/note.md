@@ -412,12 +412,12 @@ v1.15.2
 
 - iptables (linux 底層技術)
 
-##### 對外
+##### 對外網路
 
 - kube proxy
   - 雲端商把這層網路結構做掉，功能會由雲端商提供。
 
-##### 對內
+##### 對內網路
 
 - pod與pod之間溝通要靠誰？(叢集內部)
   - Container Network Interface `CNI`
@@ -452,3 +452,169 @@ Static Route 的特性
 ```
 
 -----
+
+#### 儲存
+
+- `CSI` : Container Storage Interface
+- Overly2特性：關機重開會不見
+  - 需要相關解決方案。
+  - 怎樣才能得到persistent storage
+- `SMB` :  Server Message Block
+  - 微軟file server通訊協定
+  - K8S也有相關driver可用
+- `CEPH`
+- `S3` : AWS的檔案系統
+
+- 雲端上使用各家雲端商的檔案系統設定不同
+  - yml檔的宣告
+  - performance, spec
+
+
+#### 原生K8S
+
+- 只有CRI
+- CNI / CSI 沒有裝
+  - 如果有內建，是開發商or軟體商提供
+- 還沒安裝K8s之前，先裝CNI/CSI，並且相關設定
+  - 在安裝時就會依據設定綁定安裝的CNI/CSI。
+  - 如果是線上migration，要把pod備份後轉移。
+- 如果是上雲端的系統，較不能改變
+  - 案例: GCP GKE fee free immutable
+    - 機器鎖死不能修改。
+
+-----
+
+### Kubernetes建置
+
+#### Kubernetes 基礎建置方式
+
+- 安裝方式1
+  - 地端Server (bare metal)
+  - 作業系統 linux (特規driver環境廠商提供)
+- 安裝方式2 (目前教室使用的K8s解決方案)
+  - 虛擬主機 VM
+  - 作業系統 linux ubuntu
+- 安裝方式3
+  - 軟體貨櫃 app container
+
+#### Kubernetes Cluster 建置方式
+
+##### 自建
+- 可選擇基礎建置方式
+  - Bare Metal (地端)
+  - Application Container (地端/雲端) 
+  - Virtual Machine (地端/雲端)
+
+
+###### 註解
+```
+Kubernetes 專用作業系統
+
+Kubernetes in a container  (地端/雲端)
+You can run a Kubernetes cluster locally using Docker containers, either with tools like "kind" or by enabling Kubernetes within Docker Desktop, providing a lightweight environment for local development and testing. 
+
+KinD 管網 : https://kind.sigs.k8s.io/
+
+Talos Linux 
+Talos 是 K8S 專用的Linux發行版，可用來部署 K8S 環境。Talos是一個極簡版的Linux，但又高度整合K8S，甚至可以將 Talos 打包成一個 Container 的映像檔，可以提供不可變更的Linux環境（immutable），可以透過 gRPC API和一個宣告配置檔就能管理，方便用於打造邊緣運算環境或超低功耗環境的IaC架構。
+Talos雖然是Linux系列的作業系統，但是移除了大量執行K8s時不需要的Linux功能，來簡化整體作業系統的執行負載，特別是從機器執行角度來簡化功能，而不是從人如何管理的角度來考量，因此，在 Talos 中至還移除了Console功能、SSH、Telnet功能等MIS慣用的管理機制。
+
+Taroko K8S
+Alpine Linux 是一套由社群開發，以安全為導向的 Linux 作業系統，版本 v3.6.2 在 2017-06-17 發布。
+跟一般的 Linux 發行版不一樣的地方是 Alpine 是使用 musl libc (System call) 和 busybox 來減少系統需求容量(5 MB )和執行消耗資源。
+
+比起其他輕量化 Image (如：Busybox，Image 大小為1.113MB)， Alpine 的優勢在於多了像是 apt 之於 Ubuntu 這樣的套件管理工具 apk ，官方提供了大量的套件供開發者使用，可以透過網站或者直接下 apk 指令進行查詢或者安裝。
+
+* Alpine 的 busybox 是 HardLink, 而不是 Softlink. Docker busybox image 沒有提供 套件安裝平台
+```
+
+##### 商軟
+- 可選擇基礎建置方式
+  - Bare Metal (地端)
+  - Virtual Machine (地端/雲端)
+
+###### 註解
+
+```
+Kubernetes 專用作業系統
+
+RKE2 
+SUSE Linux Enterprise (SLE) is a Linux-based operating system developed by SUSE. It is available in two editions, suffixed with Server (SLES) for servers and mainframes, and Desktop (SLED) for workstations and desktop computers.
+
+Red Hat OpenShift Container Platform (OCP)
+Red Hat Enterprise Linux CoreOS (RHCOS) represents the next generation of single-purpose container operating system technology by providing the quality standards of Red Hat Enterprise Linux (RHEL) with automated, remote upgrade features.
+RHCOS is supported only as a component of OpenShift Container Platform 4.8 for all OpenShift Container Platform machines. RHCOS is the only supported operating system for OpenShift Container Platform control plane, or master, machines. While RHCOS is the default operating system for all cluster machines, you can create compute machines, which are also known as worker machines, that use RHEL as their operating system
+```
+
+##### 雲端
+- 可選擇基礎建置方式
+  - Virtual Machine (雲端)
+
+###### 註解
+
+```
+1. Container-Optimized OS from Google documentation
+https://cloud.google.com/container-optimized-os/docs
+
+Kubernetes 專用作業系統
+Container-Optimized OS is an operating system image for your Compute Engine VMs that is optimized for running Docker containers. With Container-Optimized OS, you can bring up your Docker containers on Google Cloud Platform quickly, efficiently, and securely. Container-Optimized OS is maintained by Google and is based on the open source Chromium OS project. Learn more.
+```
+
+------
+
+## 作業-三大雲端商對於CNI,CRI,CSI的選用
+
+- 參考copilot`列舉三大雲端商的CNI,CRI,CSI選用`
+
+### **CNI（Container Network Interface）**
+
+| **雲端商** | **CNI 實作**           | **描述**                                                                 |
+|------------|------------------------|--------------------------------------------------------------------------|
+| **GCP**    | **Calico**             | GKE 預設使用 Calico，提供網路策略和高效能網路功能，適合多租戶環境。         |
+| **Azure**  | **Azure CNI** 或 Flannel | Azure CNI 深度整合 Azure 虛擬網路，支援 VNet；Flannel 提供基本網路功能。    |
+| **AWS**    | **Amazon VPC CNI** 或 Calico | Amazon VPC CNI 提供高效能的 VPC 網路整合；Calico 支援網路策略和隔離功能。   |
+
+---
+
+### **CRI（Container Runtime Interface）**
+
+| **雲端商** | **CRI 實作**       | **描述**                                                                 |
+|------------|--------------------|--------------------------------------------------------------------------|
+| **GCP**    | **ContainerD**     | GKE 預設使用 ContainerD，輕量化且高效，專為 Kubernetes 設計。             |
+| **Azure**  | **ContainerD** 或 Moby | AKS 支援 ContainerD 和 Moby（Docker 開源版本），提供靈活的容器運行時選擇。 |
+| **AWS**    | **ContainerD** 或 CRI-O | EKS 預設使用 ContainerD，支援 CRI-O 作為選項，專注於 Kubernetes 原生整合。 |
+
+---
+
+### **CSI（Container Storage Interface）**
+
+| **雲端商** | **CSI 實作**                | **描述**                                                                 |
+|------------|-----------------------------|--------------------------------------------------------------------------|
+| **GCP**    | **GCE Persistent Disk CSI** | 提供與 Google Cloud Persistent Disk 的整合，支援動態存儲配置。             |
+| **Azure**  | **Azure Disk CSI**          | 支援 Azure Managed Disks，提供高效能和高可用性的存儲解決方案。             |
+| **AWS**    | **EBS CSI**                 | 整合 Amazon Elastic Block Store（EBS），支援動態存儲和快照功能。           |
+
+---
+
+### **小結**
+
+| **介面** | **GCP**                     | **Azure**                     | **AWS**                     |
+|----------|-----------------------------|-------------------------------|-----------------------------|
+| **CNI**  | Calico                     | Azure CNI 或 Flannel          | Amazon VPC CNI 或 Calico    |
+| **CRI**  | ContainerD                 | ContainerD 或 Moby            | ContainerD 或 CRI-O         |
+| **CSI**  | GCE Persistent Disk CSI    | Azure Disk CSI                | EBS CSI                     |
+
+---
+
+### **說明**
+
+1. **CNI（Container Network Interface）**：
+   - **GCP** 和 **AWS** 偏向使用 **Calico** 提供網路策略和隔離功能。
+   - **Azure** 提供 **Azure CNI**，深度整合虛擬網路，適合混合雲環境。
+
+2. **CRI（Container Runtime Interface）**：
+   - **ContainerD** 是三大雲端商的主流選擇，輕量化且高效。
+   - **AWS** 和 **Azure** 提供其他選項（如 **CRI-O** 和 **Moby**），滿足不同需求。
+
+3. **CSI（Container Storage Interface）**：
+   - 各雲端商均提供與自家存儲服務（如 **GCP** 的 Persistent Disk、**Azure** 的 Managed Disks、**AWS** 的 EBS）整合的 CSI 插件，支援動態存儲配置和快照功能。
