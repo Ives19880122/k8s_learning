@@ -397,6 +397,17 @@ v1.15.2
 - 所在`Worker Node`上的`kubelet`產出`Pod`
   - 負責Pod裡面的`life cycle` (出生至死亡)
 
+#### Controller-Manager
+
+- workload resource
+
+#### etcd
+
+- k8s內建資料庫
+- 維運資訊, metadata, yaml, cronJob存放
+- 存取速度要快，一定要用高存取速度的硬碟
+  - ex: `NVMe SSD`
+
 #### Container Runtime 
 
 - `containerd`
