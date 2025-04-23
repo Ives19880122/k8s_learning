@@ -507,3 +507,79 @@ taroko               taroko-tkadm-74788d9f7c-qttc4                2/2     Runnin
         - Kubernetes 的 NodePort 或 Ingress。
         - 最終到達目標 Pod。
       - 這種情況下，跳數可能為 3 或更多。
+
+-----
+
+## Pod Log Rotation
+
+- Pod Log: 討論要怎樣做
+- Rotation: 總量控管作法
+
+### 檢測 Pod Log Rotation 功能
+
+- `五顆星重點`
+
+- 指令 `cat  ~/tk/wulin/yaml/pod-log.yaml`
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: pod-log
+  spec:
+    containers:
+    - name: pod-log
+      image: quay.io/cloudwalker/alp.base
+      command: ["/bin/sh"] # app container 執行的命令
+      args:
+      - -c
+      # 產生在overlay2的 /var/log
+      # 迴圈產生時間日期 count
+      - |
+        mkdir -p /var/log;i=0;
+        while true;
+        do
+          echo "$(date) INFO $i";  
+          i=$((i+1));
+        done
+  ```
+- pod產生的螢幕輸出，會被`K8S的log機制`收走，導向指定的目錄區
+  - 會存在某個Node主機的檔案系統
+  - 前述的無窮迴圈如果一直寫入，會導致硬碟爆掉
+    - 雲端則會存在雲端商的檔案系統內，導致費用爆增。
+    - 傳統機房會設定Log上限，注意雲端商的設定。
+
+- 指令 `ka -f ~/tk/wulin/yaml/pod-log.yaml`
+  ```
+  pod/pod-log created
+  ```
+- 指令 `kg pods pod-log -o wide`
+  ```
+  NAME      READY   STATUS    RESTARTS   AGE   IP             NODE           NOMINATED NODE   READINESS GATES
+  pod-log   1/1     Running   0          42s   10.244.0.139   tk8s-worker1   <none>           <none>
+  ```
+
+- 指令 `kubectl logs pod-log`
+  - 檢視Pod Log
+
+- 指令 `kubectl debug node/tk8s-worker1 -it --image=quay.io/cloudwalker/busybox`
+  - 規定：K8s node主機不能開ssh server
+  - `kubectl debug`: 創造pod到指定的worker node，檢視檔案系統內容
+  - `-it`: 虛擬終端機
+  - `busybox`: docker提供的image, 內定會執行sh, 故不用在命令列輸入
+    - size小,功能幾乎具備
+- 執行命令，會進入pod內，但有能力看到檔案系統
+
+- 指令 #`ls -al /host/var/log/pods`
+  - `/host`: 掛載在worker1檔案系統的根目錄
+  - 儲存所有pod的log
+- 指令 #`ls -al /host/var/log/pods | grep 'default_pod-log'`
+  - 路徑接續往下找 `default_pod-log_XXXXXX`
+  - 路徑接續往下找 `pod-log`
+  ```
+  drwxr-xr-x    2 root     root          4096 Apr 23 01:53 .
+  drwxr-xr-x    3 root     root          4096 Apr 23 01:31 ..
+  -rw-r-----    1 root     root       1092528 Apr 23 01:53 0.log
+  -rw-r--r--    1 root     root        120113 Apr 23 01:53 0.log.20250423-015259.gz
+  -rw-r-----    1 root     root       1148376 Apr 23 01:53 0.log.20250423-015309
+  ```
+  - 在/var底下，可以進行修改刪除
