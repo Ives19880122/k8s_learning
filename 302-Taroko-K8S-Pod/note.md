@@ -583,3 +583,117 @@ taroko               taroko-tkadm-74788d9f7c-qttc4                2/2     Runnin
   -rw-r-----    1 root     root       1148376 Apr 23 01:53 0.log.20250423-015309
   ```
   - 在/var底下，可以進行修改刪除
+
+-----
+
+## Multi-Container Pods
+
+### 解析 Kubernetes Pod 內部結構
+
+![7](./images/7.png)
+
+- 三個container共用同一片虛擬網卡
+- 技術: linux `network namespace`
+
+
+### 建立 Share PID Namespace Pod
+
+- 指令 `cat ~/tk/wulin/yaml/sharepid.yml`
+  - linux process namespace 有自己的名稱
+    - 通常app container PID 1 是自己
+  - 設定`shareProcessNamespace`
+  ```yml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: sharepid
+    annotations:
+      kubectl.kubernetes.io/default-container: "shell"
+  spec:
+    shareProcessNamespace: true
+    # 指定電腦名稱
+    hostname: xyz 
+    containers:
+    - name: derby
+      image: quay.io/cloudwalker/alpine.derby
+      imagePullPolicy: Always
+    - name: shell
+      image: quay.io/cloudwalker/alp.base
+      imagePullPolicy: IfNotPresent
+      tty: true  
+  ```
+
+- 指令 `kubectl create -f ~/tk/wulin/yaml/sharepid.yml`
+  - create 做的物件比較多
+    - 但做出來的物件不能更改
+  - apply 做出來的物件比較少
+    - 內部規格可以局部修改
+
+- 指令 `kubectl get pod/sharepid -o jsonpath='{.spec.containers[*].name}';echo ""`
+  - 內部container名稱
+  ```
+  derby shell
+  ```
+
+- 指令 `kubectl exec sharepid  -c shell -- hostname; kubectl exec sharepid  -c derby -- hostname`
+  - `-c` 指定container
+  - 詢問shell, derby namespace name
+  - 確認namespace name相同
+  ```
+  xyz
+  xyz
+  ```
+
+- 指令 `kubectl exec sharepid  -c shell -- hostname -i; kubectl exec sharepid  -c derby -- hostname -i`
+  - 確認網卡相同
+  ```
+  10.244.0.140
+  10.244.0.140
+  ```
+
+- 指令 `kubectl exec -it sharepid -- curl http://localhost:8888`
+  ```
+  <h1>Welcome to Spring Boot</h1>
+  ```
+
+- 指令 `kubectl exec -it sharepid -- ps aux`
+  - `/pause` : sleep infinity
+    - 只要k8s創造pod，一定會有隱藏的 `pause app container`
+    - 開啟 `shareProcessNamespace` 才看得到
+    - 1.18版已經鎖住
+  ```
+  USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+  65535          1  0.0  0.0   1020   640 ?        Ss   10:23   0:00 /pause
+  root           6  0.0  0.0   2180  1536 ?        Ss   10:23   0:00 bash -c /derb
+  root          19  1.0  3.6 5756296 593608 ?      Sl   10:23   0:09 java -jar -Dd
+  root          26  0.0  0.0   6572  2176 pts/0    Ss+  10:23   0:00 /bin/sleep in
+  root         126  0.0  0.0   2524  1664 pts/1    Rs+  10:39   0:00 ps aux
+  ```
+
+- 指令 `kubectl exec -it sharepid -- mkdir /proc/6/root/home/bigred`
+  - 可以用這個方式，知道PID後，進入檔案系統，執行作業
+- 指令 `kubectl exec -it sharepid  -c derby -- ls -al /home`
+  - 確認資料夾是否產生
+  ```
+  drwxr-xr-x 1 root root 4096 Apr 23 02:50 .
+  drwxr-xr-x 1 root root 4096 Apr 23 02:23 ..
+  drwxr-xr-x 2 root root 4096 Apr 23 02:50 bigred
+  ```
+
+- 案例 oracle mysql image
+  - 沒有ifconfig
+  - 解決辦法1: Dockerfile調整自己想要的image
+  - 老師的思路
+    - 從同一個namespace app container
+      - 傳入指令
+      - 或從PID去改檔案系統內的資訊
+    - 不用改image
+
+- 指令 `kubectl exec -it sharepid  -c shell -- ls -al /proc/1/root/`
+  ```
+  ls: cannot access '/proc/1/root/': Permission denied
+  command terminated with exit code 2
+  ```
+  - 因 shareip 這個 POD 的 pause container(3.0 ~ 3.5 版), 不存在 sh 命令, 以至無法登入, 但可執行以下命令, 檢視 pause container 的檔案系統 
+
+-----
