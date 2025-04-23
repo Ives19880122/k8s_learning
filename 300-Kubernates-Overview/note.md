@@ -5,6 +5,8 @@
 
 - 授課老師 陳松林 [mail](oc99.98@gmail.com)
 
+- [300投影片連結](https://docs.google.com/presentation/d/1pTB5KsyVHALAszzR4cQ_cMR3qx-ll6Hu/edit?usp=drive_link&ouid=106614399658975385059&rtpof=true&sd=true)
+
 ## 引言
 
 - 交接痛苦，沒有相關文件資訊。

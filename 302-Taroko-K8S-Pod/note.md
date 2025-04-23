@@ -1,5 +1,7 @@
 # 302-Taroko-K8S-Pod
 
+- [302投影片連結](https://docs.google.com/presentation/d/1UGm3Cexm_wMrd_s4XnyAje5Icuv_TSJa/edit?usp=drive_link&ouid=106614399658975385059&rtpof=true&sd=true)
+
 ## 手繪Cluser架構
 
 - ifconfig 分別對linux主機與ssh主機查ip

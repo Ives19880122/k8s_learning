@@ -1,5 +1,7 @@
 # 301-Taroko-K8S-Cluster
 
+- [301投影片連結](https://docs.google.com/presentation/d/1R60mvUoS-5O8r59Rsf8tlYAnfMH1fk5i/edit?usp=drive_link&ouid=106614399658975385059&rtpof=true&sd=true)
+
 ## Alpine tkcdc  虛擬主機
 
 ![1](./images/1.png)
