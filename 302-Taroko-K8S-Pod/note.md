@@ -697,3 +697,132 @@ taroko               taroko-tkadm-74788d9f7c-qttc4                2/2     Runnin
   - 因 shareip 這個 POD 的 pause container(3.0 ~ 3.5 版), 不存在 sh 命令, 以至無法登入, 但可執行以下命令, 檢視 pause container 的檔案系統 
 
 -----
+
+## Kubernetes Volume
+
+- 內部:`Kubernetes Volume`在k8s內，提供pod永存的儲存系統
+- 外部:系統與外部硬體整合，依據CSI標準
+- 注意兩者是不同的!!
+
+- ![8](./images/8.png)
+
+- `Kubernetes Volume` 原生安裝就存在
+  - `emptyDir`: 類似overlay2 與pod共存亡
+    - 用於container之間互相交換資料
+    - side car
+  - `hostPath`: host是Node主機,Path是底下的目錄
+    - 限制在Node主機下的目錄
+  - `Local`: 可以指定Node的硬碟 or Partition給Pod用
+    - 能抓該主機的硬碟來使用
+
+
+#### 實務案例
+
+- 如果Pod Retry時，不一定在同一個Worker Node。
+  - 資料是否會同時被帶過去？(不會！)
+  - 故要小心這邊的狀況
+- 希望Pod使用hostPath
+  - 但Pod遷移到其他的Node時，資料也被帶過去
+
+- 指令 `dir /opt/zfs/tk8s`
+- 掛上去 虛擬主機的速度
+
+- 指令 `docker exec tk8s-worker1 ls -al /opt/zfs`
+  - 發現與主機tkcdc內容一模一樣
+  ```
+  drwxrwxrwx 6 root root 4096 Apr 23 01:09 .
+  drwxr-xr-x 1 root root 4096 Apr 21 08:53 ..
+  -rw------- 1 1000 1000 5630 Apr 21 08:53 config
+  -rw-r--r-- 1 root root  764 Apr 21 08:53 containerd-config.yaml
+  drwxr-xr-x 2 root root 4096 Apr 21 08:57 dkreg
+  -rw-r--r-- 1 root root   70 Apr 23 01:09 hosts
+  -rw-r--r-- 1 root root 1599 Apr 21 08:53 init-config.yaml
+  -rw-rw-r-- 1 1000 1000  393 Apr 23 01:09 net.info
+  drwxr-xr-x 2 root root 4096 Apr 21 08:57 podman
+  drwxrwxrwx 2 root root 4096 Apr 21 08:57 storage
+  -rwxr-xr-x 1 root root  102 Apr 23 01:09 tkadd-dnat.sh
+  -rwxr-xr-x 1 root root  102 Apr 23 01:09 tkdel-dnat.sh
+  -rwxr-xr-x 1 root root  102 Apr 22 08:19 tkdel-dnat.sh.old
+  drwxr-xr-x 3 1000 1000 4096 Apr 21 08:58 wulin
+  ```
+  - 執行tk8s-worker2, tk8s-control-plane 相同
+- `same storage`: 資料存在 /opt/zfs ， 底下的pod會存在
+
+-----
+
+## goweb & hostPath PV
+
+- 指令 `cat ~/tk/wulin/yaml/pod-goweb-pv.yaml`
+  ```yaml
+  kind: Pod
+  apiVersion: v1
+  metadata:
+    name: goweb
+    labels:
+      app: goweb 
+  spec:
+    containers:
+      - name: podfbs
+        image: quay.io/cloudwalker/alp.goweb:24.01
+        ports:
+          - containerPort: 8080
+            # 可以從node worker直接連線
+            hostPort: 8080
+        volumeMounts:
+          # 在overlay2檔案系統, 會在 tkcdc的 /opt/zfs/tk8s內
+          - mountPath: "/opt/www/"
+            name: goweb-hp
+    volumes:
+      - name: goweb-hp
+        # 型態宣告為hostPath, 也能換成Local
+        hostPath:
+          path: /opt/zfs/goweb
+    nodeName: tk8s-worker2
+  ```
+
+- 指令 `kubectl apply -f ~/tk/wulin/yaml/pod-goweb-pv.yaml`
+  ```
+  pod/goweb created
+  ```
+- 注意control plane路徑，地端沒有問題，但雲端是鎖定的
+
+
+- 指令 `kubectl nodes -o wide`
+  - 確認worker2 ip
+
+- 指令 `curl http://172.22.0.3:8080`
+  - 拜訪goweb
+  ```
+  <pre>
+  </pre>
+  ```
+  
+- 指令 `kubectl exec pod/goweb -- cp -u -r /opt/web/. /opt/www/`
+  - 複製已經有的網站配置
+
+- 指令 `curl http://172.22.0.3:8080`
+  ```
+  <pre>
+  / -> /opt/www
+  /db -> /opt/www/cgi/mydata.sh
+  /data -> /opt/www/cgi/mydata.sh
+  /info -> /opt/www/cgi/myinfo.sh
+  </pre>
+  ```
+
+- 指令 `kubectl delete pod/goweb`
+  - 刪除pod, 實驗tkcdc是否有掛載保留資訊
+
+- 指令 `kubectl apply -f ~/tk/wulin/yaml/pod-goweb-pv.yaml`
+  - 改成在 tk8s-worker1
+
+- 指令 `curl http://172.22.0.2:8080`
+  - 確認volume資料有掛載
+  ```
+  <pre>
+  / -> /opt/www
+  /db -> /opt/www/cgi/mydata.sh
+  /data -> /opt/www/cgi/mydata.sh
+  /info -> /opt/www/cgi/myinfo.sh
+  </pre>
+  ```
