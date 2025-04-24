@@ -634,3 +634,179 @@ drwxr-xr-x 3 1000 1000 4096 Apr 21 08:58 wulin
 - `Flannel` 致命傷，無法提供network policy(防火牆)
 - CNI一定要support network policy
   - 避免客戶裝flannel，理由如上
+- Demo使用的的CNI, `Canal` 是 Calico的分支
+- 證照推薦`CCNA`，才有辦法handle k8s網路
+
+### Canal運作架構
+
+![7](./images/7.png)
+
+- Canal 是一個 Kubernetes 網路插件，結合了 Flannel 和 Calico 的功能，提供簡單易用的網路連接（Flannel）和強大的網路策略管理（Calico）。它是一個混合型解決方案，適合需要基本網路功能和網路安全策略的 Kubernetes 叢集。
+
+- 虛擬橋接網路丟資料
+
+- workerNode flanal.1 透過daemon程式傳遞資料
+  - 讀`etcd`資料庫
+    - network policy rule
+
+- node之間
+  - `etcd` -> routing table表
+  - 傳遞加密封包
+
+- `Multus CNI`
+  - Multus CNI 是 Kubernetes 的一個 CNI 插件，用於實現多網卡（多網路接口）的支持。它允許 Pod 同時連接到多個網路，從而滿足複雜網路需求，例如多租戶環境、網路隔離、高性能網路等。
+  - 上雲的環境，Redhat Openshift有的功能，雲端也要具備。
+  - 虛擬橋接器，不透過daemon，速度會比較快
+  - Multus 除了Pod之間，也能在不同Node之間建立通道。
+
+- 指令 `kubectl get all -n kube-system -o wide -l k8s-app=canal`
+  ```
+  NAME              READY   STATUS    RESTARTS         AGE     IP           NODE                 NOMINATED NODE   READINESS GATES
+  pod/canal-9dc5v   2/2     Running   10 (5h12m ago)   2d20h   172.22.0.2   tk8s-worker1         <none>           <none>
+  pod/canal-ql5xj   2/2     Running   10 (5h12m ago)   2d20h   172.22.0.3   tk8s-worker2         <none>           <none>
+  pod/canal-rv6n7   2/2     Running   10 (5h12m ago)   2d20h   172.22.0.1   tk8s-control-plane   <none>           <none>
+
+  NAME                   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE     CONTAINERS                 IMAGES                                                                 SELECTOR
+  daemonset.apps/canal   3         3         3       3            3           kubernetes.io/os=linux   2d20h   calico-node,kube-flannel   quay.io/cloudwalker/node:v3.29.2,quay.io/cloudwalker/flannel:v0.24.4   k8s-app=canal
+  ```
+  - `daemonSet`: 在每一個node安排一個pod
+    - 執行daemon程式(負責監控的設計)
+  - 問題 `Prometheus` 的監控方式最早在每個pod side car監控
+    - 有效能問題，後面拉到Node來做
+
+- 指令 `kubectl get pod/canal-9dc5v -o json -n kube-system | grep -A 1 '"command":' | tr -d ' ' | grep /opt/bin/flanneld`
+  ```
+  "/opt/bin/flanneld",
+  ```
+
+-----
+
+## kube-proxy daemonset
+
+- 原生ipvs要突破內外網路的問題
+- 選用雲端商 ipvs 內外網路要順暢
+  - 花錢買服務
+
+### kube-proxy 如何做出
+
+- 指令 `kubectl get all -n kube-system -o wide -l k8s-app=kube-proxy`
+- kube-proxy是一個程式來維護iptables
+- vitural ip 是 iptables做出來的
+  - 由kube-proxy產生
+- 是一個daemonset嵌入在k8s node裡面
+  - 才能維護相同的iptables
+- daemonset要讀 `etcd`
+  - daemonset controller產生`pod`
+
+- 指令 `sudo podman exec tk8s-worker2 curl -s localhost:10249/proxyMode; echo`
+  - 確認kube-proxy的proxyMode
+  ```
+  nftables
+  ```
+
+------
+
+## Container Storage Interface (CSI)
+
+- 第三方儲存設備
+
+- `官方的CSI` https://github.com/kubernetes-csi
+  - csi-driver-nfs : linux
+  - csi-driver-smb : ms file server
+  - csi-driver-host-path 
+    - 透過此csi運用某個node上的hostPath
+    - 會有實戰流程
+    - 注意: 有血淚經驗
+
+
+### Dynamic Volume Provision
+
+![8](./images/8.png)
+
+- pod 裡面要宣告一組 `pvc` yaml檔
+  - 使用空間大小
+  - 存取模式(Read/Write/RW)
+
+- StorageClass
+  - 一個interface，透過它run背後的程式
+  - 參考`RuntimeClass`，有不同的實作方式
+
+- Deployment/`Provisioner` : 負責產生 `pv`
+  - 通知nfs file system要求儲存需求
+  - 找到persistance volume
+  - `bound`(捆綁,領証) `pvc`與`pv`
+    - 把`pvc`刪掉時，`pv`就不能再跟其他pvc bound
+    - 物件產生`uuid`
+    - 實務作法`pv`,`pvc`要一起刪掉
+
+- 由`Provisioner`建立`pv`
+  - 所以只要建立`pvc`
+  - 透過`CSI`會協助維運`pv`
+
+- 問題 `Provisioner` 程式誰提供
+  - 雲端商/地端商業軟體
+    - 使用的程式都不相同
+  - driver會去哪邊找空間？
+    - ex: AWS會想到S3
+
+
+- 指令 `kubectl get all -n local-path-storage`
+  ```
+  NAME                                          READY   STATUS    RESTARTS        AGE
+  pod/local-path-provisioner-84944977bd-fpmmz   1/1     Running   7 (6h11m ago)   2d21h
+
+  NAME                                     READY   UP-TO-DATE   AVAILABLE   AGE
+  deployment.apps/local-path-provisioner   1/1     1            1           2d21h
+
+  NAME                                                DESIRED   CURRENT   READY   AGE
+  replicaset.apps/local-path-provisioner-84944977bd   1         1         1       2d21h
+  ```
+  - 這套csi使用 `deployment/replicaset` workload建立
+- 大部分csi是用`deployment` controller建立驅動程式的pod
+  - 問題：CSI版本舊，是否能進版
+    - depolyment負責可以
+  - 問題：Node是否有容錯
+    - replicaset會重建pod
+
+- 實驗刪除pod
+
+- 指令 `kubectl delete pod/local-path-provisioner-84944977bd-fpmmz -n local-path-storage`
+  ```
+  pod "local-path-provisioner-84944977bd-fpmmz" deleted
+  ```
+- 重新執行get all 發現 replicaset已產生新的pod
+
+
+### 建立 PersistentVolumeClaim
+
+- 指令 `kubectl get sc`
+  - `sc` : StorageClass
+  - 要把名稱寫在PVC裡面
+  ```
+  NAME         PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+  local-path   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  2d22h
+  ```
+
+- 指令 `cat ~/tk/wulin/yaml/pvc-nginx.yaml`
+  - yaml先看kind
+  ```yaml
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: nginx-storage
+    annotations:
+      volumeType: hostPath     # volumeType: <local or hostPath>
+  spec:
+    storageClassName: local-path
+    accessModes:
+      # 控管限制由CSI驅動程式決定
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 3Mi
+  ```
+  - 存取模式由csi決定
+    - 當csi驅動程式沒有特別對accessMode作用時，會沒有作用
+    - 因此要看實作廠商的技術文件，千萬不能亂寫
+
+- 每個供應商，都有各自擅長的storage，因此轉換到別的雲或者商品時，因為各自的特點不同，會遇到migration的痛點。
