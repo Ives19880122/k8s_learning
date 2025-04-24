@@ -239,3 +239,398 @@ options ndots:5
 - `resolv.conf` 是 Kubernetes 中 Pod 的 DNS 配置文件，用於域名解析。
 - `search` 定義了域名解析的後綴順序，`nameserver` 指定了 Kubernetes 的內部 DNS 伺服器，`options ndots:5` 控制了域名是否附加後綴進行解析。
 - 正確配置和理解這些參數對於 Kubernetes 叢集內的服務通信至關重要。
+
+-----
+
+### kube-dns Service 運作架構
+
+![4](./images/4.png)
+
+- 為何coredns會有兩個pod塞在control plane
+- zone database: 存record
+- etcd : 在control plane
+  - 故coredns就近放這
+- 兩個pod做load balance
+
+- 指令 `kubectl pods -n kube-system -o wide`
+  - 查詢coredns所在位置
+  ```
+  NAME                                         READY   STATUS    RESTARTS       AGE     IP             NODE                 NOMINATED NODE   READINESS GATES
+  calico-kube-controllers-6b65fb5f89-66t62     1/1     Running   5 (42m ago)    2d16h   10.244.0.19    tk8s-control-plane   <none>           <none>
+  canal-9dc5v                                  2/2     Running   10 (42m ago)   2d16h   172.22.0.2     tk8s-worker1         <none>           <none>
+  canal-ql5xj                                  2/2     Running   10 (42m ago)   2d16h   172.22.0.3     tk8s-worker2         <none>           <none>
+  canal-rv6n7                                  2/2     Running   10 (42m ago)   2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  coredns-66967f4c59-sc4gn                     1/1     Running   5 (42m ago)    2d16h   10.244.0.20    tk8s-control-plane   <none>           <none>
+  coredns-66967f4c59-zkpkl                     1/1     Running   5 (42m ago)    2d16h   10.244.0.21    tk8s-control-plane   <none>           <none>
+  etcd-tk8s-control-plane                      1/1     Running   5 (42m ago)    2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  kube-apiserver-tk8s-control-plane            1/1     Running   5 (42m ago)    2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  kube-controller-manager-tk8s-control-plane   1/1     Running   5 (42m ago)    2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  kube-proxy-4g4b7                             1/1     Running   5 (42m ago)    2d16h   172.22.0.3     tk8s-worker2         <none>           <none>
+  kube-proxy-lstnd                             1/1     Running   5 (42m ago)    2d16h   172.22.0.2     tk8s-worker1         <none>           <none>
+  kube-proxy-tpn5w                             1/1     Running   8 (42m ago)    2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  kube-scheduler-tk8s-control-plane            1/1     Running   5 (42m ago)    2d16h   172.22.0.1     tk8s-control-plane   <none>           <none>
+  metrics-server-8467fcc7b7-d9x4b              1/1     Running   10 (42m ago)   2d16h   10.244.0.146   tk8s-worker1         <none>           <none>
+  ```
+  - 原生coredns在control plane
+    - 這個版本k8s是在產生時刪除pod，replicaset會在worker上面產生新的pod。
+
+#### kube proxy
+
+- k8s service會透過kube proxy協助運作
+- 有三種模式 iptables, nftables, ipvs
+
+##### iptables (預設)
+
+- 會發生iptables storm，當service數量超過`1000`，明顯運作效能下降
+  - 查詢沒有index概念,只有`table scan`
+- 情境: microservice
+- 1.30版，出現`nftalbes`
+  - netfilter，比iptables快100倍
+
+##### nftable
+
+- nftables 是 Linux 系統中的一個框架，用於替代傳統的 iptables，負責網路封包過濾和流量控制。它是 Netfilter 子系統的一部分，從 Linux Kernel 3.13 開始引入，並逐漸成為 iptables 的現代化替代方案。
+
+- 缺點ip random
+
+###### nftables 在 Kubernetes 中的應用
+
+1. 解決 iptables storm 問題：
+
+   - 當 Kubernetes 中的 Service 數量超過 1000 時，iptables 的性能會明顯下降，因為它需要逐條掃描規則。
+   - nftables 使用高效的查詢結構，能夠快速匹配規則，避免性能瓶頸。
+
+2. 提升微服務架構的網路性能：
+
+   - 在微服務架構中，Service 和 Pod 的數量通常較多，nftables 能夠更高效地處理大量的網路規則。
+
+3. 未來的 Kubernetes 網路解決方案：
+
+   - 隨著 Linux Kernel 的發展，nftables 已經成為 iptables 的現代化替代方案，未來可能會成為 Kubernetes 的默認網路過濾框架。
+
+
+##### ipvs
+
+- IPVS 在 Kubernetes CoreDNS 的用途
+  - IPVS（IP Virtual Server） 是 Linux Kernel 中的一個高效能負載均衡框架，主要用於處理網路流量的分發。在 Kubernetes 中，IPVS 是 kube-proxy 的一種運行模式，負責高效地處理 Service 的流量轉發。
+
+
+##### Kube Proxy 三種模式差異
+
+| **模式**       | **描述**                                                                 | **優點**                                                                 | **缺點**                                                                 |
+|----------------|-------------------------------------------------------------------------|--------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| **iptables**   | 傳統的網路封包過濾框架，使用線性規則掃描來處理流量轉發。                  | - Kubernetes 預設模式，成熟穩定。<br>- 易於理解和配置。                   | - 當 Service 規模超過 1000 時，性能明顯下降（iptables storm）。<br>- 查詢沒有索引概念，需逐條掃描規則（table scan）。 |
+| **nftables**   | iptables 的現代化替代方案，使用高效的查詢結構來處理流量轉發。              | - 性能更高，適合大量規則。<br>- 語法簡潔一致，易於管理。<br>- 支援更靈活的匹配條件。 | - 目前在 Kubernetes 中的應用較少，生態系統尚未完全成熟。<br>- 可能存在 IP 隨機性問題（ip random）。 |
+| **ipvs**       | 基於 Linux Kernel 的高效能負載均衡框架，使用哈希表進行規則匹配。           | - 性能最佳，適合大規模微服務架構。<br>- 支援多種負載均衡算法（如輪詢、最小連接）。<br>- 提供高可用性和快速故障轉移。 | - 配置相對複雜，學習成本較高。<br>- 需要 Kernel 支援，對舊版本的 Linux 可能不兼容。 |
+
+-----
+
+#### kubernates service
+
+- 參考運作架構圖
+- service 一定會註冊到 coredns
+  - 對外的運作名稱
+  - `kubernates.default.svc.tk8s.k8s`
+    - `<service-name>.<namespace>.svc.<cluster-domain>`
+    - `default`: namespace
+    - `svc`: service record
+      - 固定值，表示這是一個 Kubernetes 的 Service。
+      - 用於區分其他類型的資源（如 Pod、ConfigMap 等）。
+    - `tk8s.k8s`: cluster-domain
+      - 表示叢集的域名，通常由叢集的 DNS 配置決定。
+      - 在這個例子中，tk8s.k8s 是叢集的域名。
+
+##### bobo service
+
+- 參考運作架構圖
+- bobo.cute.svc.tk8s.k8s
+- 注意命名，外面有的命名，內部命名不能衝突，不然會連不到
+
+#### k8s namespace設定 `操作`
+
+- 指令 `dir /opt/zfs/tk8s`
+- 指令 `docker ps -a`
+  ```
+  CONTAINER ID  IMAGE                               COMMAND     CREATED     STATUS      PORTS       NAMES
+  857bbe4422c0  quay.io/cloudwalker/taroko:v1.32.2  bash        2 days ago  Up 2 hours              tk8s-control-plane
+  8504cc6d6722  quay.io/cloudwalker/taroko:v1.32.2  bash        2 days ago  Up 2 hours              tk8s-worker1
+  6b1fdced9b95  quay.io/cloudwalker/taroko:v1.32.2  bash        2 days ago  Up 2 hours              tk8s-worker2
+  ```
+- 指令 `docker exec -it tk8s-control-plane bash`
+
+- 進入control-plane主機,找設定檔
+- 指令 `ls -al /opt/zfs`
+```
+drwxrwxrwx 7 root root 4096 Apr 24 00:42 .
+drwxr-xr-x 1 root root 4096 Apr 21 08:53 ..
+-rw------- 1 1000 1000 5630 Apr 21 08:53 config
+-rw-r--r-- 1 root root  764 Apr 21 08:53 containerd-config.yaml
+drwxr-xr-x 2 root root 4096 Apr 21 08:57 dkreg
+drwxr-xr-x 3 root root 4096 Apr 23 05:47 goweb
+-rw-r--r-- 1 root root   70 Apr 24 00:42 hosts
+-rw-r--r-- 1 root root 1599 Apr 21 08:53 init-config.yaml
+-rw-rw-r-- 1 1000 1000  393 Apr 24 00:42 net.info
+drwxr-xr-x 2 root root 4096 Apr 21 08:57 podman
+drwxrwxrwx 2 root root 4096 Apr 21 08:57 storage
+-rwxr-xr-x 1 root root  102 Apr 24 00:42 tkadd-dnat.sh
+-rwxr-xr-x 1 root root  102 Apr 24 00:42 tkdel-dnat.sh
+-rwxr-xr-x 1 root root  102 Apr 24 00:30 tkdel-dnat.sh.old
+drwxr-xr-x 3 1000 1000 4096 Apr 21 08:58 wulin
+```
+
+- 指令 `cat /opt/zfs/init-config.yaml`
+  ```yaml
+  apiVersion: kubeadm.k8s.io/v1beta4
+  kind: InitConfiguration
+  localAPIEndpoint:
+    advertiseAddress: 172.22.0.1                   # change from Master node IP
+    bindPort: 6443
+  nodeRegistration:
+    #!! 使用CRI containerd !!#
+    criSocket: unix:///run/containerd/containerd.sock         # change from CRI-O Unix Socket
+    imagePullPolicy: IfNotPresent
+    name: tk8s-control-plane                                      # change from Master node hsotname
+    taints: null
+  ---
+  apiServer: {}
+  apiVersion: kubeadm.k8s.io/v1beta4
+  certificatesDir: /etc/kubernetes/pki
+  #!! 叢集名稱，多叢集要不一樣 !!#
+  clusterName: tk8s                             # set your clusterName
+  controllerManager:
+    extraArgs:
+      - name: node-cidr-mask-size              # set pod cidr per node
+        value: "25"
+  dns: {}
+  etcd:
+    local:
+      dataDir: /var/lib/etcd
+  imageRepository: registry.k8s.io
+  kind: ClusterConfiguration
+  #!! 版本代號 > 1.30 以上 !!#
+  kubernetesVersion: 1.32.2
+  networking:
+    #!! domain name !!#
+    dnsDomain: tk8s.k8s                                    # DNS domain used by Kubernetes Services.
+    podSubnet: 10.244.0.0/21                             # the subnet used by Pods.
+    serviceSubnet: 10.98.0.0/24                           # subnet used by Kubernetes Services.
+  scheduler: {}
+  ---
+  apiVersion: kubeproxy.config.k8s.io/v1alpha1
+  kind: KubeProxyConfiguration
+  #!! 選用dns模式 !!#
+  mode: nftables
+  ---
+  apiVersion: kubelet.config.k8s.io/v1beta1
+  kind: KubeletConfiguration
+  #!! 官網預設110(跟IP配置數量有關)，主機不強要降低 !!#
+  maxPods: 80
+  # podLogsDir: /opt/zfs/logs
+  #!! 限制避免爆單 !!#
+  containerLogMaxFiles: 3    
+  containerLogMaxSize: 1Mi   
+  #evictionHard:
+  #  memory.available: "1024Mi"
+  #  nodefs.available: "10%"
+  #kubeReserved:
+  #  cpu: "500m"
+  #  memory: "1Gi"
+  #systemReserved:
+  #  cpu: "1"
+  #  memory: "1Gi"
+  #  ephemeral-storage: "10Gi"
+  ```
+
+- tk8s流程 
+  - 先產生container
+  - 外部主機cp設定檔
+  - kubeadm 建立 傳入設定檔
+
+- 自建k8s權限設定是最廣的
+- 雲端是已經設定好了，部份規格鎖死
+
+
+#### tk/bin原始碼解析(補充)
+- 自建k8s命令，參考講師使用shell腳本建立流程
+
+- 建立container指令`kcn`
+- 指令 `cat tk/bin/kcn`
+  ```shell
+    sudo podman run -itd \
+      --name ${ctn} \
+      --hostname ${ctn} \
+      --cpus ${cc} \
+      --memory ${cm} \
+      --privileged \
+      --net ${cn} \
+      # 指定IP
+      --ip ${cip} \
+      --volume ${HDIR}/cni:/opt/cni/bin \
+      --volume /lib/modules:/lib/modules:ro \
+      --volume ${controlVolume}:/var:suid,exec,dev,rbind \
+      --volume /opt/zfs/${cn}:/opt/zfs \
+      # 掛到container內，pod可以使用的dockerfile
+      --volume ${HDIR}/tk/wulin:/opt/wulin \
+      --cgroupns=private \
+      $IMG bash &>/dev/null
+  ```
+- `control group`: app container才有
+  - vm啟動比k8s快
+  - 但執行k8s比vm快
+  - 因為有control group負責相關工作分配
+  - control group
+    - `1.24`: v1
+    - `1.30`: v2
+    - 效能v2比v1好
+  - jdk 8 內建會去咬 control group v1
+    - 導致k8s要被退板到1.30以下
+  - 要跟客戶確認是否有遺產系統存在
+
+- 建立k8s `kto`
+- 指令 `cat tk/bin/kto`
+  - k8s設定檔, 讀取configmap
+    ```shell
+    [ ! -f ~/tk/conf/${cn}.conf ] && echo "~/tk/conf/${cn}.conf not found" && exit 1
+    source ~/tk/conf/${cn}.conf
+    ```
+  - 設定進container
+    ```shell
+    cat ~/tk/bin/init-config-now.yaml | envsubst | sudo tee /opt/zfs/${cn}/init-config.yaml &>/dev/null
+    ```
+  - app container kubeadm 做出 control plane
+    ```shell
+    sudo podman exec -it ${cn}-control-plane bash -c "kubeadm init --config=/opt/zfs/init-config.yaml --ignore-preflight-errors=SystemVerification"
+    ```
+  - kubeproxy
+    ```
+    kubectl get configmap kube-proxy -n kube-system -o yaml 2>/dev/null | \
+          sed 's/maxPerCore: null/maxPerCore: 0/g' | kubectl apply -f - &>/dev/null
+    ```
+  - work1
+    ```
+    sudo podman exec -it ${cn}-worker1 bash -c "$join $ignore" &>/tmp/${cn}-worker1.out
+    ```
+  - work2
+    ```
+    sudo podman exec -it ${cn}-worker2 bash -c "$join $ignore" &>/tmp/${cn}-worker2.out
+    ```
+
+-----
+
+## Container Runtime Interface (CRI)
+
+- 建立app container的標準
+- `runc`: 執行程式(go語言寫的)
+  - 執行命令不只有runc這個命令
+- `crun`: 用c語言寫的執行程式(加速器)
+- 程式已經cp進node主機
+  - 但需要告知關聯
+
+### K8S Runtime Class
+
+- 檢查檔案內容
+- 指令 `dir /opt/zfs/tk8s`
+- 讀取containerd-config.yaml給containerd
+- 指令 `cat /opt/zfs/tk8s/containerd-config.yaml`
+  - 糾正副檔名 `toml`
+  ```toml
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."dkreg.taroko:5000"]
+    endpoint = ["http://dkreg.taroko:5000"]
+  [plugins."io.containerd.grpc.v1.cri".registry.configs."dkreg.taroko:5000".tls]
+    insecure_skip_verify = true
+  # crun要trace的位置
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.crun]
+    base_runtime_spec = "/etc/containerd/cri-base.json"
+    runtime_type = "io.containerd.runc.v2"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.crun.options]
+      BinaryName = "/usr/bin/crun"
+  # app container共用kernel，sc有獨立的kernel
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
+    base_runtime_spec = "/etc/containerd/cri-base.json"
+    runtime_type = "io.containerd.runsc.v1"
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
+      BinaryName = "/usr/local/bin/runsc"
+  ```
+  - crun在每個node的`/usr/bin/crun'
+  - 專案kata把pod變成真正的vm
+    - `KubeVirt` => Virtual machine
+    - 表示k8s管理pod的工具，將來有機會管理VM
+  - `Harvester`: datacenter 系統
+    - `參考連結` https://github.com/harvester/harvester
+    - 建議裸機安裝，內建k8s，KubeVirt
+    - 專供virtual machine，可以頂替VM Ware
+    - 效能弱於VM Ware
+
+###### runc與runsc差異
+
+|名稱|描述|
+|-----|-----|
+|runc|傳統的容器運行時，基於 Linux Namespace 和 cgroups，提供輕量級的容器化運行環境。|
+|runsc|基於 Google 的 gVisor 技術，提供沙盒化的容器運行時，強調安全隔離。|
+
+
+#### 建立與使用 crun Runtime Class
+
+- 指令 `cat ~/tk/wulin/yaml/rc-crun.yaml`
+  ```yaml
+  apiVersion: node.k8s.io/v1
+  kind: RuntimeClass
+  # 告訴k8s有crun
+  metadata:
+    name: crun
+  handler: crun 
+  ```
+- 指令 `kubectl apply -f  ~/tk/wulin/yaml/rc-crun.yaml`
+  ```
+  runtimeclass.node.k8s.io/crun created
+  ```
+
+- 指令 `cat ~/tk/wulin/yaml/pod-crun.yaml`
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: pod-crun
+  spec:
+    # 可以設定選用的runtimeClassName,彈性調整
+    runtimeClassName: crun
+    containers:
+    - name: base
+      image: quay.io/cloudwalker/alp.base
+      securityContext:
+        privileged: true
+  ```
+
+- 指令 `kubectl apply -f ~/tk/wulin/yaml/pod-crun.yaml`
+  ```
+  pod/pod-crun created
+  ```
+
+- 指令 `kubectl get pods -o wide`
+  ```
+  NAME       READY   STATUS    RESTARTS       AGE   IP             NODE           NOMINATED NODE   READINESS GATES
+  dnscmd     1/1     Running   2 (3h3m ago)   19h   10.244.0.148   tk8s-worker1   <none>           <none>
+  goweb      1/1     Running   2 (3h3m ago)   21h   10.244.0.147   tk8s-worker1   <none>           <none>
+  pod-crun   1/1     Running   0              14s   10.244.0.149   tk8s-worker1   <none>           <none>
+  ```
+
+### 認識gVisor
+
+![5](./images/5.png)
+- Application 包含相依檔 image內容
+- gVisor google創造虛擬kernel hyper visor
+
+![6](./images/6.png)
+- gVisor架構
+- `Sentry`: 負責 211 個系統呼叫, 不是全部系統呼叫, 所以不是所有應用系統都能在 gVisor 架構中執行
+- `Gofer`: 負責檔案系統
+
+------
+
+## Container Network Interface (CNI)
+
+- 花錢買軟體上雲，要想辦法知道底層術語，與雲端商溝通，對於專案才能有效維運。
+
+- `Flannel` 致命傷，無法提供network policy(防火牆)
+- CNI一定要support network policy
+  - 避免客戶裝flannel，理由如上
